@@ -45,14 +45,17 @@ function createParticle() {
   particles3 = [];
 
   // Process particles for the sky image
+// Process particles for the sky image
   let imgCopy1 = img1.get(); // Copy sky image
   imgCopy1.resize(width, height); // Resize image to fit the canvas responsively
-  for (let x = 0; x < imgCopy1.width; x += partSize1) {
-    for (let y = 0; y < imgCopy1.height; y += partSize1) {
+
+  // 调整步长为 2 * partSize1，确保粒子相切排列
+  for (let x = 0; x < imgCopy1.width; x += 2 * partSize1) {
+    for (let y = 0; y < imgCopy1.height; y += 2 * partSize1) {
       let c = imgCopy1.get(x, y); // Get pixel color
       if (brightness(color(c)) > 0) {
-        // Only generate particles if brightness > 0
-        particles1.push(new Particle(x, y, c, partSize1, partSize1));
+        // 粒子尺寸设置为 2 * partSize1，使半径翻倍
+        particles1.push(new Particle(x, y, c, 2 * partSize1, 2 * partSize1));
       }
     }
   }
@@ -64,7 +67,7 @@ function createParticle() {
     for (let y = 0; y < imgCopy2.height; y += partSize2) {
       let c = imgCopy2.get(x, y);
       if (brightness(color(c)) > 0) {
-        particles2.push(new Particle(x, y, c, partSize2 * 1.8, partSize2 * 1.1));
+        particles2.push(new Particle(x, y, c, partSize2 * 2.5, partSize2 * 0.8));
       }
     }
   }
@@ -171,7 +174,7 @@ class Particle {
     this.targetBrightness = random(0.8, 1.2); // 目标亮度系数
     this.phaseOffset = random(TWO_PI); // 每个粒子的相位偏移量
     this.scale = 1.0;
-    this.scaleWeight = random(1, 7);
+    this.scaleWeight = random(1, 8);
     this.translate = { x: 0, y: 0 };
   }
 
