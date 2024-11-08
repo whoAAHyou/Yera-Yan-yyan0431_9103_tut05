@@ -1,7 +1,9 @@
 let img1; // Image1: Sky part
 let img2; // Image2: Water part
 let img3; // Image2: House part
-let song;
+let music; // 音频文件
+let amplitude; // 音量分析对象
+let fft; // 频谱分析对象
 
 // Use circles to form each part separately and class them in arrays.
 let particles1 = [];
@@ -14,14 +16,12 @@ let partSize3 = 10; // Size of particles forming the house
 // Three RGB colors for background gradient, arranged vertically from top to bottom
 let c1, c2, c3;
 
-let music = new Music('Assests/Vivaldi.mp3')
-
 function preload() {
   // Preload original image of each part.
-  img1 = loadImage('Assests/sky.png');
-  img2 = loadImage('Assests/water.png');
-  img3 = loadImage('Assests/house.png');
-  //song = loadSound('Assests/Vivaldi.mp3');
+  img1 = loadImage("Assests/sky.png");
+  img2 = loadImage("Assests/water.png");
+  img3 = loadImage("Assests/house.png");
+  music = loadSound('Assests/Vivaldi.mp3');
 }
 
 function setup() {
@@ -31,7 +31,12 @@ function setup() {
   // Call the function to create particles for each image part
   createParticle();
 
-  music.setup();
+  // Initialize amplitude and FFT for volume and frequency analysis
+  amplitude = new p5.Amplitude();
+  amplitude.setInput(music);
+
+  fft = new p5.FFT(0.8, 128); // 设置FFT平滑度和频率分辨率
+  fft.setInput(music);
 }
 
 function createParticle() {
@@ -45,7 +50,8 @@ function createParticle() {
   for (let x = 0; x < imgCopy1.width; x += partSize1) {
     for (let y = 0; y < imgCopy1.height; y += partSize1) {
       let c = imgCopy1.get(x, y); // Get pixel color
-      if (brightness(color(c)) > 0) { // Only generate particles if brightness > 0
+      if (brightness(color(c)) > 0) {
+        // Only generate particles if brightness > 0
         particles1.push(new Particle(x, y, c, partSize1, partSize1));
       }
     }
@@ -58,7 +64,7 @@ function createParticle() {
     for (let y = 0; y < imgCopy2.height; y += partSize2) {
       let c = imgCopy2.get(x, y);
       if (brightness(color(c)) > 0) {
-        particles2.push(new Particle(x, y, c, partSize2 * 2, partSize2 * 0.8));
+        particles2.push(new Particle(x, y, c, partSize2 * 1.8, partSize2 * 1.1));
       }
     }
   }
@@ -83,7 +89,6 @@ function windowResized() {
 }
 
 function draw() {
-
   background(255); // Set the canvas BG as white initially
 
   // Set a linear gradient color for the background, vertically gradient from top to bottom in the order of c1, c2, c3
@@ -92,40 +97,65 @@ function draw() {
   c3 = color(144, 183, 255); // Light blue
 
   // Main implementation uses interpolation to generate colors, drawing tightly spaced horizontal lines from top to bottom
-  for (let y = 0; y < height * 0.5; y += 1) {
+  for (let y = 0; y < height * 0.5; y++) {
     let c = lerpColor(c1, c2, map(y, 0, height * 0.5, 0, 1));
     stroke(c);
     strokeWeight(1);
     line(0, y, width, y);
   }
 
-  for (let y = height * 0.5; y < height; y += 1) {
+  for (let y = height * 0.5; y < height; y++) {
     let c = lerpColor(c2, c3, map(y, height * 0.5, height, 0, 1));
     stroke(c);
     strokeWeight(1);
     line(0, y, width, y);
   }
 
+  // 获取音量级别，映射到亮度变化范围
+  let level = amplitude.getLevel();
+  let brightnessFactor = map(level, 0, 1, 0.8, 1.5);
+  let spectrum = fft.analyze(); // 获取频谱数据 
+
+
+
   // Draw and update each particle
-  for (let i = 0; i < particles1.length; i++) { // Sky particles
-    particles1[i].update();
+  for (let i = 0; i < particles1.length; i++) {
+    particles1[i].update({ spark: true, brightnessFactor });
     particles1[i].display();
   }
 
-  for (let i = 0; i < particles3.length; i++) { // House particles
-    particles3[i].display(); // Display only, no brightness fluctuation
+  // House particles
+  for (let i = 0; i < particles3.length; i++) {
+    particles3[i].display();
   }
 
-  for (let i = 0; i < particles2.length; i++) { // Water particles
-    particles2[i].update({ scale:  music.level * 2 + 1 });
-    particles2[i].displayLine(); // Display with wave effect
-  }
+ // Water particles with frequency-based translation and scaling
+ for (let i = 0; i < particles2.length; i++) {
+  const point = particles2[i];
+  const px = point.x / width;
+  const freqIdx = Math.floor(px * spectrum.length);
+  const freq = spectrum[freqIdx] || 0;
+  const translateY = -map(freq, 0, 255, -50, 50); // 水平方向波动
+
+  const breathScale = map(sin(frameCount * 0.02 - px * PI * 2), -1, 1, 0.9, 1.1);
+
+  const s = map(level, 0, 1, 1, 1.2) * breathScale; // 音量控制缩放
+
+  point.update({
+    translate: { x: 0, y: translateY },
+    scale: s,
+    spark: true,
+  });
+  point.displayLine();
+ }
 }
 
-
-function mouseClicked(){
-  music.play();
-
+function mouseClicked() {
+  if (music.isPlaying()) {
+    music.pause();
+  } else {
+    music.play();
+  }
 }
 
 // Particle class - defining the properties and methods of each particle
@@ -141,31 +171,45 @@ class Particle {
     this.targetBrightness = random(0.8, 1.2); // 目标亮度系数
     this.phaseOffset = random(TWO_PI); // 每个粒子的相位偏移量
     this.scale = 1.0;
+    this.scaleWeight = random(1, 7);
+    this.translate = { x: 0, y: 0 };
   }
 
   display() {
     noStroke();
     fill(this.col);
-    ellipse(this.x, this.y, this.w * this.scale, this.h * this.scale);
+    ellipse(
+      this.x + this.translate.x,
+      this.y + this.translate.y,
+      this.w * this.scale,
+      this.h * this.scale
+    );
   }
 
   displayLine() {
     noStroke();
     fill(this.col);
     ellipse(
-      this.x,
-      this.y + sin(this.x * 0.01 + frameCount * 0.01) * partSize2 * 0.5,
-      this.w * this.scale,
-      this.h * this.scale,
+      this.x + this.translate.x,
+      this.y +
+        this.translate.y +
+        sin(this.x * 0.01 + frameCount * 0.02) * partSize2 * 0.7,
+      this.w * this.scale, // 应用 scale 来根据音量改变大小
+      this.h * this.scale  // 应用 scale 来根据音量改变大小
     );
   }
 
-  update(options) {
-    if (options) {
-      this.scale = options.scale || 1.0;
+  update(options) { 
+    if (options && options.scale) {
+      this.scale = (options.scale - 1.0) * this.scaleWeight + 1.0;
     }
-    // 只在sky部分应用亮度波动
-    if (particles1.includes(this)) {
+
+    if (options && options.translate) {
+      this.translate = options.translate;
+    }
+
+    // 只在 sky 部分应用亮度波动
+    if (options && options.spark) {
       let fluctuation = sin(frameCount * 0.03 + this.phaseOffset) * 0.2;
       let currentBrightness = this.brightness + fluctuation;
 
