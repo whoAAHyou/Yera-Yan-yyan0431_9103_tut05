@@ -1,15 +1,15 @@
 let img1; // Image1: Sky part
 let img2; // Image2: Water part
 let img3; // Image2: House part
-let music; // 音频文件
-let amplitude; // 音量分析对象
-let fft; // 频谱分析对象
+let music; // Audio file
+let amplitude; // Analyzes volume
+let fft; // Analyzes frequency spectrum
 
 // Use circles to form each part separately and class them in arrays.
 let particles1 = [];
 let particles2 = [];
 let particles3 = [];
-let partSize1 = 30; // Size of particles forming the sky
+let partSize1 = 60; // Size of particles forming the sky
 let partSize2 = 25; // Size of particles forming the water
 let partSize3 = 10; // Size of particles forming the house
 
@@ -17,7 +17,7 @@ let partSize3 = 10; // Size of particles forming the house
 let c1, c2, c3;
 
 function preload() {
-  // Preload original image of each part.
+  // Preload original audio and image of each part.
   img1 = loadImage("Assests/sky.png");
   img2 = loadImage("Assests/water.png");
   img3 = loadImage("Assests/house.png");
@@ -35,7 +35,7 @@ function setup() {
   amplitude = new p5.Amplitude();
   amplitude.setInput(music);
 
-  fft = new p5.FFT(0.8, 128); // 设置FFT平滑度和频率分辨率
+  fft = new p5.FFT(0.8, 128); // Initialize FFT analysis for frequency spectrum with 128 bands
   fft.setInput(music);
 }
 
@@ -49,13 +49,11 @@ function createParticle() {
   let imgCopy1 = img1.get(); // Copy sky image
   imgCopy1.resize(width, height); // Resize image to fit the canvas responsively
 
-  // 调整步长为 2 * partSize1，确保粒子相切排列
-  for (let x = 0; x < imgCopy1.width; x += 2 * partSize1) {
-    for (let y = 0; y < imgCopy1.height; y += 2 * partSize1) {
+  for (let x = 0; x < imgCopy1.width; x += partSize1) {
+    for (let y = 0; y < imgCopy1.height; y += partSize1) {
       let c = imgCopy1.get(x, y); // Get pixel color
       if (brightness(color(c)) > 0) {
-        // 粒子尺寸设置为 2 * partSize1，使半径翻倍
-        particles1.push(new Particle(x, y, c, 2 * partSize1, 2 * partSize1));
+        particles1.push(new Particle(x, y, c, partSize1, partSize1));
       }
     }
   }
@@ -114,10 +112,10 @@ function draw() {
     line(0, y, width, y);
   }
 
-  // 获取音量级别，映射到亮度变化范围
+  // Audio volume-based brightness control
   let level = amplitude.getLevel();
   let brightnessFactor = map(level, 0, 1, 0.8, 1.5);
-  let spectrum = fft.analyze(); // 获取频谱数据 
+  let spectrum = fft.analyze(); // Get audio spectrum for frequency-based control
 
 
 
@@ -135,14 +133,14 @@ function draw() {
  // Water particles with frequency-based translation and scaling
  for (let i = 0; i < particles2.length; i++) {
   const point = particles2[i];
-  const px = point.x / width;
-  const freqIdx = Math.floor(px * spectrum.length);
+  const px = point.x / width; // Normalize x-position
+  const freqIdx = Math.floor(px * spectrum.length); // Determine frequency index
   const freq = spectrum[freqIdx] || 0;
-  const translateY = -map(freq, 0, 255, -50, 50); // 水平方向波动
+  const translateY = -map(freq, 0, 255, -50, 50); // Map frequency value to y-axis movement
 
+  // Generate a wave-like breathing effect across x-axis
   const breathScale = map(sin(frameCount * 0.02 - px * PI * 2), -1, 1, 0.9, 1.1);
-
-  const s = map(level, 0, 1, 1, 1.2) * breathScale; // 音量控制缩放
+  const s = map(level, 0, 1, 1, 1.2) * breathScale; // Scale particles based on volume and breathing effect
 
   point.update({
     translate: { x: 0, y: translateY },
@@ -153,6 +151,7 @@ function draw() {
  }
 }
 
+// Can play and pause music when click on the screen
 function mouseClicked() {
   if (music.isPlaying()) {
     music.pause();
@@ -166,68 +165,73 @@ class Particle {
   constructor(x, y, col, w, h) {
     this.x = x;
     this.y = y;
-    this.baseCol = col; // 基础颜色
-    this.col = col; // 当前颜色
+    this.baseCol = col; 
+    this.col = col; 
     this.w = w;
     this.h = h;
-    this.brightness = 1.0; // 当前亮度系数
-    this.targetBrightness = random(0.8, 1.2); // 目标亮度系数
-    this.phaseOffset = random(TWO_PI); // 每个粒子的相位偏移量
+    this.brightness = 1.0; // Brightness level
+    this.targetBrightness = random(0.8, 1.2); // Target brightness for smooth transition
+    this.phaseOffset = random(TWO_PI); // Offset phase for brightness fluctuation
     this.scale = 1.0;
-    this.scaleWeight = random(1, 8);
-    this.translate = { x: 0, y: 0 };
+    this.scaleWeight = random(1, 8); // Random weight for scaling
+    this.translate = { x: 0, y: 0 }; // Translation offset
   }
 
+  // Disply the sky and house particles
   display() {
     noStroke();
     fill(this.col);
     ellipse(
-      this.x + this.translate.x,
-      this.y + this.translate.y,
+      this.x + this.translate.x, // X-coordinate including any horizontal translation
+      this.y + this.translate.y, // Y-coordinate including any vertical translation
+      // The size of ellipse particles rely on the value of scale
       this.w * this.scale,
       this.h * this.scale
     );
   }
 
+  // Disply the water particles
+  // This method adds a sinusoidal vertical oscillation to simulate water movement
   displayLine() {
     noStroke();
     fill(this.col);
     ellipse(
       this.x + this.translate.x,
-      this.y +
-        this.translate.y +
-        sin(this.x * 0.01 + frameCount * 0.02) * partSize2 * 0.7,
-      this.w * this.scale, // 应用 scale 来根据音量改变大小
-      this.h * this.scale  // 应用 scale 来根据音量改变大小
-    );
+      // Adjust parameters below
+      this.y + this.translate.y + sin(this.x * 0.01 + frameCount * 0.02) * partSize2 * 0.7,
+                                      this.w * this.scale, this.h * this.scale ); 
   }
 
-  update(options) { 
+  // Update particle properties based on options passed in
+  // This method applies scale, translation, and brightness fluctuations for animation
+  update(options) {
+    // Apply scale to the particle 
     if (options && options.scale) {
+      // Scale the particle size based on scaleWeight and given scale factor
       this.scale = (options.scale - 1.0) * this.scaleWeight + 1.0;
     }
 
+    // Apply translation
     if (options && options.translate) {
       this.translate = options.translate;
     }
 
-    // 只在 sky 部分应用亮度波动
     if (options && options.spark) {
       let fluctuation = sin(frameCount * 0.03 + this.phaseOffset) * 0.2;
       let currentBrightness = this.brightness + fluctuation;
 
-      // 应用亮度变化到颜色
+      // Apply brightness fluctuation to RGB color channels
       let r = red(this.baseCol) * currentBrightness;
       let g = green(this.baseCol) * currentBrightness;
       let b = blue(this.baseCol) * currentBrightness;
       this.col = color(r, g, b);
 
-      // 更新亮度逐步接近目标亮度
+      // Smoothly transition current brightness towards target brightness for natural effect
       this.brightness = lerp(this.brightness, this.targetBrightness, 0.02);
 
-      // 当亮度接近目标时，生成新的随机目标亮度
+      // When the brightness reaches close to the target, set a new target brightness
       if (abs(this.brightness - this.targetBrightness) < 0.05) {
-        this.targetBrightness = random(0.8, 1.2);
+        this.targetBrightness = random(0.8, 1.2); // New random target brightness
       }
     }
   }
